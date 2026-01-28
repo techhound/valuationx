@@ -1,176 +1,166 @@
-import streamlit as st
-import pandas as pd
-from pprint import pformat
+# ValuationX
 
-# --- Backend imports ---
-from data.fetch_financials import fetch_stock_financials
-from data.fetch_sector_etfs import fetch_sector_etf_metrics
-from analytics.compute_multiples import compute_stock_multiples, compute_sector_multiples
-from analytics.normalize import normalize_relative_valuation
-from llm.sector_selector import select_sector_etf
-from llm.mispricing_explainer import explain_relative_mispricing
+ValuationX is a Python-based **equity valuation support system** that benchmarks individual stocks against **State Street Select Sector SPDR ETFs** to provide context-aware relative valuation analysis.
 
-# --- Page config ---
-st.set_page_config(
-    page_title="Sector-Based Valuation Estimator",
-    layout="wide"
+The system is designed to support analytical reasoning and valuation sanity-checks — **not** to generate investment recommendations or price targets.
+
+---
+
+## Purpose & Philosophy
+
+ValuationX formalizes a common analyst workflow:
+
+> *Before building a full valuation model (DCF, detailed comps, etc.), analysts often benchmark a company against its sector to understand whether its valuation looks unusual — and why.*
+
+ValuationX supports that process by:
+- Mapping a company to an appropriate sector ETF
+- Comparing valuation multiples against sector benchmarks
+- Explaining potential drivers of relative over- or under-valuation
+
+The emphasis is on **interpretability, judgment, and transparency**, not prediction.
+
+---
+
+## Key Features
+
+- **Sector Benchmarking**  
+  Uses State Street Select Sector SPDR ETFs as industry proxies.
+
+- **LLM-Assisted Sector Classification**  
+  Maps companies to sector ETFs based on business model and revenue drivers.
+
+- **Relative Valuation Analysis**  
+  Compares company-level valuation multiples to sector benchmarks.
+
+- **Narrative Explanations**  
+  Produces plain-English explanations for valuation differences.
+
+- **Layered, Modular Architecture**  
+  Organized into data ingestion, analytics, and LLM-assisted reasoning layers.
+
+---
+
+## Project Structure
+
+ValuationX/
+│── src/
+│ ├── data/
+│ │ ├── fetch_financials.py # Retrieves company financial data
+│ │ └── fetch_sector_etfs.py # Retrieves sector ETF benchmark data
+│ │
+│ ├── analytics/
+│ │ ├── compute_multiples.py # Calculates valuation multiples
+│ │ └── normalize.py # Normalizes metrics for comparison
+│ │
+│ └── llm/
+│ ├── sector_selector.py # LLM-assisted sector classification
+│ └── mispricing_explainer.py # Generates valuation explanations
+│
+│── notebooks/ # Optional exploratory analysis
+│── README.md
+│── requirements.txt
+
+
+---
+
+## Prerequisites
+
+- **Python 3.10+**
+- Git
+- An OpenAI API key (used for sector classification and narrative explanations)
+
+---
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/valuationx.git
+cd valuationx
+2. Create and activate a virtual environment
+Windows
+
+python -m venv .venv
+.venv\Scripts\activate
+macOS / Linux
+
+python -m venv .venv
+source .venv/bin/activate
+3. Install dependencies
+pip install -r requirements.txt
+Configuration
+ValuationX uses environment variables for API credentials.
+
+OpenAI API Key
+Set your OpenAI API key as an environment variable.
+
+Windows (PowerShell)
+
+setx OPENAI_API_KEY "your_api_key_here"
+macOS / Linux
+
+export OPENAI_API_KEY="your_api_key_here"
+⚠️ Do not hardcode API keys into source files.
+
+Basic Usage (Conceptual Workflow)
+A typical ValuationX workflow follows these steps:
+
+Select a company (ticker and optional business description)
+
+Determine the appropriate sector benchmark
+
+Retrieve company and sector financial data
+
+Compute valuation multiples
+
+Normalize metrics for comparison
+
+Generate a narrative explanation of valuation differences
+
+Example (High-Level)
+from src.llm.sector_selector import select_sector_etf
+from src.analytics.compute_multiples import compute_multiples
+from src.llm.mispricing_explainer import explain_valuation
+
+sector = select_sector_etf(
+    ticker="XOM",
+    company_name="Exxon Mobil",
+    business_description="Integrated oil and gas company"
 )
 
-st.title("📊 Sector-Based Valuation Estimator")
-st.caption(
-    "A ballpark valuation tool using State Street Select Sector ETFs "
-    "as sector proxies. Not a DCF. Not investment advice."
-)
+multiples = compute_multiples("XOM", sector)
 
-st.divider()
+explanation = explain_valuation("XOM", sector, multiples)
 
-# --- User input ---
-with st.form("valuation_form"):
-    ticker = st.text_input("Enter Stock Ticker", value="XOM")
-    company_name = st.text_input("Company Name", value="Exxon Mobil Corporation")
-    business_description = st.text_area(
-        "Business Description (optional)",
-        value="Integrated oil and gas company with upstream, downstream, and chemicals operations.",
-        height=100
-    )
-
-    submitted = st.form_submit_button("Run Valuation")
-
-# --- Main workflow ---
-if submitted:
-    with st.spinner("Running sector-based valuation analysis..."):
-        try:
-            # 1️⃣ LLM: sector selection
-            sector_selection = select_sector_etf(
-                ticker=ticker,
-                company_name=company_name,
-                business_description=business_description
-            )
-
-            primary_etf = sector_selection["primary_etf"]
-
-            # 2️⃣ Fetch financials
-            stock_raw = fetch_stock_financials(ticker)
-            sector_raw = fetch_sector_etf_metrics(primary_etf)
-
-            # 3️⃣ Compute multiples
-            stock_metrics = compute_stock_multiples(stock_raw)
-            sector_metrics = compute_sector_multiples(sector_raw)
-
-            # 4️⃣ Normalize valuation
-            comparison = normalize_relative_valuation(
-                stock_metrics,
-                sector_metrics
-            )
-
-            # 5️⃣ LLM: explain mispricing
-            explanation = explain_relative_mispricing(
-                stock_metrics,
-                sector_metrics,
-                comparison
-            )
-
-        except Exception as e:
-            st.error(f"Something went wrong: {e}")
-            st.stop()
-
-    # --- Results layout ---
-    st.success("Valuation complete")
-
-    # --- Sector selection ---
-    st.subheader("🧭 Sector Classification (LLM)")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("Primary Sector ETF", primary_etf)
-        if sector_selection.get("secondary_etf"):
-            st.metric("Secondary Sector ETF", sector_selection["secondary_etf"])
-
-    with col2:
-        st.markdown("**Rationale**")
-        st.write(sector_selection["rationale"])
-
-    st.divider()
-
-    # --- Valuation comparison ---
-    st.subheader("📐 Valuation Comparison")
-
-    valuation_df = pd.DataFrame(
-        {
-            "Stock": stock_metrics,
-            "Sector ETF": sector_metrics
-        }
-    ).dropna(how="all")
-
-    st.dataframe(valuation_df, use_container_width=True)
-
-    st.divider()
-
-    # --- Normalized signals ---
-    st.subheader("⚖️ Relative Valuation Signals")
-
-    signals_df = pd.DataFrame(
-        comparison.items(),
-        columns=["Metric", "Signal / Value"]
-    )
-
-    st.dataframe(signals_df, use_container_width=True)
-
-    st.divider()
-
-    # --- LLM explanation ---
-    st.subheader("🧠 Valuation Interpretation (LLM)")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("**Summary**")
-        st.write(explanation["valuation_summary"])
-
-        st.markdown("**Classification**")
-        st.info(explanation["classification"])
-
-    with col2:
-        st.markdown("**Key Drivers**")
-        st.write(explanation["key_drivers"])
-
-        st.markdown("**Risk Factors**")
-        st.write(explanation["risk_factors"])
-
-    # --- Optional debug section ---
-    with st.expander("🔍 Debug / Raw Outputs"):
-        st.markdown("**Stock Metrics**")
-        st.code(pformat(stock_metrics))
-
-        st.markdown("**Sector Metrics**")
-        st.code(pformat(sector_metrics))
-
-        st.markdown("**Normalized Comparison**")
-        st.code(pformat(comparison))
-
-        st.markdown("**LLM Explanation (Raw)**")
-        st.code(pformat(explanation))
-
-
-## Design Principles
-
+print(explanation)
+Design Principles
 Explainability over automation
-Bounded use of LLMs
-No black-box predictions
-Clear separation of data, logic, and narrative
 
-## Limitations
+Bounded and transparent use of LLMs
 
-This system does not replace a full valuation model (DCF).
-Results depend on data quality and benchmark selection.
+Clear separation of data, analytics, and narrative layers
+
+No black-box predictions or trading signals
+
+Limitations
+ValuationX does not replace a full valuation model (e.g., DCF).
+
 Sector ETFs are imperfect proxies for individual companies.
+
+Results depend on data quality and benchmark selection.
+
 These limitations are intentional and explicit.
 
-## Disclaimer
-
+Disclaimer
 This project is for educational and analytical purposes only and does not constitute financial, investment, or trading advice.
 
-## Future Enhancements
-Power BI integration for interactive analysis
+Future Enhancements
+Power BI integration for interactive benchmarking
+
+Streamlit or web-based interface
+
 Expanded factor-based benchmarking
-Additional sector granularity
+
+Greater sector and industry granularity
+
