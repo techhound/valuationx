@@ -150,3 +150,27 @@ if submitted:
 
         st.markdown("**LLM Explanation (Raw)**")
         st.code(pformat(explanation))
+
+
+## Design Principles
+
+Explainability over automation
+Bounded use of LLMs
+No black-box predictions
+Clear separation of data, logic, and narrative
+
+## Limitations
+
+This system does not replace a full valuation model (DCF).
+Results depend on data quality and benchmark selection.
+Sector ETFs are imperfect proxies for individual companies.
+These limitations are intentional and explicit.
+
+## Disclaimer
+
+This project is for educational and analytical purposes only and does not constitute financial, investment, or trading advice.
+
+## Future Enhancements
+Power BI integration for interactive analysis
+Expanded factor-based benchmarking
+Additional sector granularity
